@@ -1,0 +1,8 @@
+﻿.gradle/
+build/
+out/
+bin/
+*.iml
+*.class
+*.log
+.vscode/settings.json

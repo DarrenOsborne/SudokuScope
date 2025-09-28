@@ -1,0 +1,48 @@
+.root {
+    -fx-font-family: "Segoe UI", sans-serif;
+    -fx-padding: 16;
+    -fx-background-color: linear-gradient(to bottom, #f4f6fb, #ffffff);
+}
+
+.sudoku-grid {
+    -fx-hgap: 4;
+    -fx-vgap: 4;
+    -fx-padding: 12;
+    -fx-background-color: #ffffff;
+    -fx-border-color: #1f3c88;
+    -fx-border-width: 2;
+    -fx-border-radius: 8;
+    -fx-background-radius: 8;
+}
+
+.sudoku-cell {
+    -fx-pref-width: 48;
+    -fx-pref-height: 48;
+    -fx-alignment: center;
+    -fx-font-size: 20px;
+    -fx-border-color: #d0d7f3;
+    -fx-border-width: 1;
+}
+
+.sudoku-cell.invalid {
+    -fx-border-color: #d64550;
+    -fx-background-color: rgba(214, 69, 80, 0.15);
+}
+
+.status-bar {
+    -fx-spacing: 12;
+    -fx-padding: 12 0 0 0;
+}
+
+.status-label {
+    -fx-font-size: 14px;
+}
+
+.controls {
+    -fx-spacing: 8;
+}
+
+.button-primary {
+    -fx-background-color: #1f3c88;
+    -fx-text-fill: white;
+}
