@@ -1,7 +1,14 @@
-.root {
+﻿.root {
     -fx-font-family: "Segoe UI", sans-serif;
     -fx-padding: 16;
     -fx-background-color: linear-gradient(to bottom, #f4f6fb, #ffffff);
+}
+
+.solution-count {
+    -fx-font-size: 54px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #1f3c88;
+    -fx-alignment: center;
 }
 
 .sudoku-grid {

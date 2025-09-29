@@ -23,14 +23,26 @@ public final class BoardView {
     grid.getStyleClass().add("sudoku-grid");
     grid.setAlignment(Pos.CENTER);
 
+    Label headline = createSolutionHeadline(viewModel);
+    BorderPane.setAlignment(headline, Pos.CENTER);
+    BorderPane.setMargin(headline, new Insets(12, 16, 12, 16));
+    root.setTop(headline);
+
     createCells(viewModel);
     VBox content = new VBox(16, grid, buildStatusBar(viewModel));
-    content.setPadding(new Insets(8));
+    content.setPadding(new Insets(8, 16, 16, 16));
     root.setCenter(content);
   }
 
   public Parent getRoot() {
     return root;
+  }
+
+  private Label createSolutionHeadline(BoardViewModel viewModel) {
+    Label label = new Label();
+    label.getStyleClass().add("solution-count");
+    label.textProperty().bind(viewModel.solutionCountTextProperty());
+    return label;
   }
 
   private void createCells(BoardViewModel viewModel) {
@@ -82,10 +94,6 @@ public final class BoardView {
   }
 
   private VBox buildStatusBar(BoardViewModel viewModel) {
-    Label solutionCount = new Label();
-    solutionCount.getStyleClass().add("status-label");
-    solutionCount.textProperty().bind(viewModel.solutionCountTextProperty());
-
     Label statusMessage = new Label();
     statusMessage.getStyleClass().add("status-label");
     statusMessage.textProperty().bind(viewModel.solverMessageProperty());
@@ -114,7 +122,7 @@ public final class BoardView {
 
     VBox statusBar = new VBox(8);
     statusBar.getStyleClass().add("status-bar");
-    statusBar.getChildren().addAll(solutionCount, statusMessage, uniqueBadge, controls);
+    statusBar.getChildren().addAll(statusMessage, uniqueBadge, controls);
     return statusBar;
   }
 
