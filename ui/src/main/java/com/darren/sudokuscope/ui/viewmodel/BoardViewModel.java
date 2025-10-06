@@ -186,8 +186,6 @@ public final class BoardViewModel {
       revertCell(row, col);
       return;
     }
-    refreshFromBoard();
-    triggerAnalysis();
   }
 
   private void revertCell(int row, int col) {
@@ -319,12 +317,6 @@ public final class BoardViewModel {
       solverMessage.set(
           "Estimated possibilities with " + filled + " filled cell" + (filled == 1 ? "" : "s"));
     }
-  }
-
-    gameState.undo();
-    refreshFromBoard();
-    solverMessage.set("Last move led to zero solutions and was undone.");
-    triggerAnalysis();
   }
 
   private BigInteger computeSequentialEstimate(SudokuBoard board) {

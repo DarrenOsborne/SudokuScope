@@ -1,55 +1,68 @@
 ﻿.root {
-    -fx-font-family: "Segoe UI", sans-serif;
-    -fx-padding: 16;
-    -fx-background-color: linear-gradient(to bottom, #f4f6fb, #ffffff);
+    -fx-font-family: "Segoe UI", "Roboto", sans-serif;
+    -fx-padding: 24;
+    -fx-background-color: linear-gradient(to bottom, #eef2fb 0%, #ffffff 75%);
 }
 
 .solution-count {
-    -fx-font-size: 54px;
-    -fx-font-weight: bold;
-    -fx-text-fill: #1f3c88;
-    -fx-alignment: center;
+    -fx-font-size: 56px;
+    -fx-font-weight: 700;
+    -fx-text-fill: #0f2b6b;
+    -fx-effect: dropshadow(gaussian, rgba(15, 43, 107, 0.25), 15, 0.2, 0, 6);
 }
 
 .sudoku-grid {
-    -fx-hgap: 4;
-    -fx-vgap: 4;
-    -fx-padding: 12;
+    -fx-padding: 8;
     -fx-background-color: #ffffff;
-    -fx-border-color: #1f3c88;
-    -fx-border-width: 2;
-    -fx-border-radius: 8;
-    -fx-background-radius: 8;
+    -fx-background-radius: 12;
+    -fx-border-radius: 12;
+    -fx-border-color: #0f2b6b;
+    -fx-border-width: 4;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.18), 18, 0.35, 0, 8);
 }
 
 .sudoku-cell {
-    -fx-pref-width: 48;
-    -fx-pref-height: 48;
+    -fx-pref-width: 54;
+    -fx-pref-height: 54;
+    -fx-font-size: 22px;
+    -fx-font-weight: 600;
+    -fx-text-fill: #17223b;
+    -fx-background-insets: 0;
+    -fx-background-color: linear-gradient(to bottom, #ffffff 0%, #f7f9ff 100%);
     -fx-alignment: center;
-    -fx-font-size: 20px;
-    -fx-border-color: #d0d7f3;
-    -fx-border-width: 1;
+    -fx-border-color: transparent;
+}
+
+.sudoku-cell:focused {
+    -fx-background-color: #e6eeff;
+    -fx-text-fill: #0f2b6b;
 }
 
 .sudoku-cell.invalid {
-    -fx-border-color: #d64550;
-    -fx-background-color: rgba(214, 69, 80, 0.15);
+    -fx-background-color: rgba(214, 69, 80, 0.18);
+    -fx-text-fill: #7a0e1b;
 }
 
 .status-bar {
-    -fx-spacing: 12;
-    -fx-padding: 12 0 0 0;
+    -fx-spacing: 14;
+    -fx-padding: 16 0 0 0;
 }
 
 .status-label {
-    -fx-font-size: 14px;
+    -fx-font-size: 15px;
+    -fx-text-fill: #25345d;
 }
 
 .controls {
-    -fx-spacing: 8;
+    -fx-spacing: 10;
 }
 
 .button-primary {
     -fx-background-color: #1f3c88;
     -fx-text-fill: white;
+    -fx-font-weight: 600;
+    -fx-background-radius: 6;
+}
+.button-primary:hover {
+    -fx-background-color: #2749a5;
 }

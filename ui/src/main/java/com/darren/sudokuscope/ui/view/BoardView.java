@@ -46,9 +46,9 @@ public final class BoardView {
   }
 
   private void createCells(BoardViewModel viewModel) {
-    grid.setHgap(4);
-    grid.setVgap(4);
-    grid.setPadding(new Insets(8));
+    grid.setHgap(0);
+    grid.setVgap(0);
+    grid.setPadding(new Insets(12));
     for (int row = 0; row < 9; row++) {
       for (int col = 0; col < 9; col++) {
         TextField field = new TextField();
@@ -70,6 +70,7 @@ public final class BoardView {
                   return null;
                 }));
         field.textProperty().bindBidirectional(viewModel.cellProperty(row, col));
+        applyCellBorders(field, row, col);
         grid.add(field, col, row);
         inputs[row][col] = field;
       }
@@ -79,6 +80,17 @@ public final class BoardView {
         .boardValidProperty()
         .addListener((obs, wasValid, isValid) -> updateValidityStyles(isValid));
     updateValidityStyles(viewModel.boardValidProperty().get());
+  }
+
+  private void applyCellBorders(TextField field, int row, int col) {
+    int top = row == 0 ? 4 : (row % 3 == 0 ? 2 : 1);
+    int bottom = row == 8 ? 4 : ((row + 1) % 3 == 0 ? 2 : 1);
+    int left = col == 0 ? 4 : (col % 3 == 0 ? 2 : 1);
+    int right = col == 8 ? 4 : ((col + 1) % 3 == 0 ? 2 : 1);
+    String style =
+        String.format(
+            "-fx-border-width: %d %d %d %d; -fx-border-color: #1f3c88;", top, right, bottom, left);
+    field.setStyle(style);
   }
 
   private void updateValidityStyles(boolean boardValid) {
