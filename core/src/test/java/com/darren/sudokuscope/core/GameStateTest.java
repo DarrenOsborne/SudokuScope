@@ -21,4 +21,30 @@ class GameStateTest {
     state.redo();
     assertThat(state.board().valueAt(1, 1)).isEqualTo(9);
   }
+
+  @Test
+  void noOpCommandsDoNotModifyHistory() {
+    GameState state = new GameState();
+    CellPosition position = new CellPosition(0, 0);
+
+    BoardEvent initialEvent = state.apply(new SetValueCommand(position, 0));
+    assertThat(initialEvent.isNoOp()).isTrue();
+    assertThat(state.canUndo()).isFalse();
+
+    state.apply(new SetValueCommand(position, 5));
+    assertThat(state.board().valueAt(0, 0)).isEqualTo(5);
+    assertThat(state.canUndo()).isTrue();
+
+    state.apply(new SetValueCommand(position, 5));
+    assertThat(state.canUndo()).isTrue();
+
+    state.undo();
+    assertThat(state.board().valueAt(0, 0)).isZero();
+    assertThat(state.canUndo()).isFalse();
+    assertThat(state.canRedo()).isTrue();
+
+    state.apply(new SetValueCommand(position, 0));
+    assertThat(state.canUndo()).isFalse();
+    assertThat(state.canRedo()).isTrue();
+  }
 }
