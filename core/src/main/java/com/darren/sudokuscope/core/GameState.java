@@ -37,11 +37,16 @@ public final class GameState {
   public BoardEvent apply(BoardCommand command) {
     Objects.requireNonNull(command, "command");
     BoardCommand.MutationResult result = command.apply(board);
-    board = result.newBoard();
+    SudokuBoard newBoard = result.newBoard();
+    BoardEvent event = result.event();
+    if (event.isNoOp() || newBoard.equals(board)) {
+      return event;
+    }
+    board = newBoard;
     undoStack.push(result.undoCommand());
     redoStack.clear();
-    notifyObservers(result.event());
-    return result.event();
+    notifyObservers(event);
+    return event;
   }
 
   public boolean canUndo() {
