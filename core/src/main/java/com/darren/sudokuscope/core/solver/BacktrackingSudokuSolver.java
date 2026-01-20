@@ -43,10 +43,10 @@ final class BacktrackingSudokuSolver implements SudokuSolver {
     state.search();
 
     SolverStatus status;
-    if (state.solutionCount == 0) {
-      status = SolverStatus.NO_SOLUTION;
-    } else if (state.limitReached) {
+    if (state.limitReached) {
       status = SolverStatus.LIMIT_REACHED;
+    } else if (state.solutionCount == 0) {
+      status = SolverStatus.NO_SOLUTION;
     } else if (state.solutionCount == 1) {
       status = SolverStatus.UNIQUE_SOLUTION;
     } else {
@@ -72,6 +72,7 @@ final class BacktrackingSudokuSolver implements SudokuSolver {
   private static final class SearchState {
     private final SolverOptions options;
     private final int limit;
+    private final long deadlineNanos;
     private final byte[] working;
     private byte[] firstSolution;
     private final int[] rowMasks = new int[SudokuBoard.SIZE];
@@ -86,12 +87,15 @@ final class BacktrackingSudokuSolver implements SudokuSolver {
     private int forcedTop;
     private long solutionCount;
     private boolean limitReached;
+    private boolean timeLimitReached;
+    private boolean interrupted;
     private long visitedNodes;
     private String message = "Search completed";
 
     private SearchState(SudokuBoard board, SolverOptions options) {
       this.options = options;
       this.limit = options.isUnlimited() ? Integer.MAX_VALUE : options.maxSolutions();
+      this.deadlineNanos = options.deadlineNanos();
       this.working = board.toByteArray();
       this.emptyOrder = new ArrayList<>();
       List<Integer> empties = new ArrayList<>();
@@ -119,7 +123,11 @@ final class BacktrackingSudokuSolver implements SudokuSolver {
 
     private void search() {
       backtrack(0);
-      if (limitReached) {
+      if (interrupted) {
+        message = "Stopped due to interruption";
+      } else if (timeLimitReached) {
+        message = "Stopped after reaching time limit";
+      } else if (limitReached) {
         message = "Stopped after reaching maxSolutions=" + limit;
       } else if (solutionCount == 0) {
         message = "No solutions found";
@@ -129,7 +137,7 @@ final class BacktrackingSudokuSolver implements SudokuSolver {
     }
 
     private void backtrack(int depth) {
-      if (limitReached) {
+      if (shouldStop()) {
         return;
       }
       if (depth == emptyPositions.length) {
@@ -146,6 +154,10 @@ final class BacktrackingSudokuSolver implements SudokuSolver {
       int forcedStart = forcedTop;
       int forcedCount = propagateSingles(depth);
       if (forcedCount < 0) {
+        return;
+      }
+      if (shouldStop()) {
+        undoForced(depth, forcedStart);
         return;
       }
       int nextDepth = depth + forcedCount;
@@ -187,12 +199,29 @@ final class BacktrackingSudokuSolver implements SudokuSolver {
         visitedNodes++;
         backtrack(nextDepth + 1);
         remove(row, col, box, cell, digit, bit);
-        if (limitReached && !options.isUnlimited()) {
+        if (shouldStop()) {
           break;
         }
       }
       swap(emptyPositions, nextDepth, pivotIndex);
       undoForced(depth, forcedStart);
+    }
+
+    private boolean shouldStop() {
+      if (limitReached) {
+        return true;
+      }
+      if (deadlineNanos > 0 && System.nanoTime() >= deadlineNanos) {
+        timeLimitReached = true;
+        limitReached = true;
+        return true;
+      }
+      if (Thread.currentThread().isInterrupted()) {
+        interrupted = true;
+        limitReached = true;
+        return true;
+      }
+      return false;
     }
 
     private int propagateSingles(int depth) {

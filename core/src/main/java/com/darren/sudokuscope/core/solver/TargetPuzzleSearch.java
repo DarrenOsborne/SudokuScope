@@ -1,19 +1,15 @@
 package com.darren.sudokuscope.core.solver;
 
 import com.darren.sudokuscope.core.SudokuBoard;
-import com.darren.sudokuscope.core.SudokuFacts;
-import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.math.MathContext;
-import java.math.RoundingMode;
 import java.util.Objects;
 import java.util.Random;
 
 /** Searches for a puzzle whose solution count is closest to a target. */
 public final class TargetPuzzleSearch {
-  private static final int ALL_DIGITS_MASK = 0x1FF;
+  private static final int BASE = 3;
+  private static final int SIDE = BASE * BASE;
   private static final int MIN_CLUES = 10;
-  private static final MathContext ESTIMATE_CONTEXT = new MathContext(40, RoundingMode.HALF_UP);
 
   private final SudokuSolver solver = SudokuSolver.createDefault();
 
@@ -27,6 +23,23 @@ public final class TargetPuzzleSearch {
 
   public SearchResult findClosest(
       BigInteger target, long timeLimitMillis, int maxSolutions, long seed) {
+    SudokuBoard solved = generateRandomSolved(timeLimitMillis, seed);
+    if (solved == null) {
+      return new SearchResult(SudokuBoard.empty(), BigInteger.ZERO, true, 0L, 0L, target);
+    }
+    return findClosestFromSolved(solved, target, timeLimitMillis, maxSolutions, seed);
+  }
+
+  public SudokuBoard generateRandomSolved(long timeLimitMillis, long seed) {
+    long deadline =
+        timeLimitMillis <= 0 ? 0L : System.nanoTime() + timeLimitMillis * 1_000_000L;
+    Random random = new Random(seed);
+    return generateSolvedBoard(random, deadline);
+  }
+
+  public SearchResult findClosestFromSolved(
+      SudokuBoard solved, BigInteger target, long timeLimitMillis, int maxSolutions, long seed) {
+    Objects.requireNonNull(solved, "solved");
     Objects.requireNonNull(target, "target");
     if (target.signum() <= 0) {
       throw new IllegalArgumentException("target must be positive");
@@ -35,28 +48,42 @@ public final class TargetPuzzleSearch {
       throw new IllegalArgumentException("maxSolutions must be non-zero");
     }
     long boundedLimit = Math.max(500L, timeLimitMillis);
-    Random random = new Random(seed);
-    int solverLimit = resolveMaxSolutions(target, maxSolutions);
-    SolverOptions options = new SolverOptions(solverLimit, false, true);
-    long iterations = 0;
     long start = System.nanoTime();
     long deadline = start + boundedLimit * 1_000_000L;
-    Candidate best = null;
+    int solverLimit = resolveMaxSolutions(target, maxSolutions);
+    boolean limitImpliesOverTarget = limitImpliesOverTarget(target, solverLimit);
+    SolverOptions options = new SolverOptions(solverLimit, false, true, 0L);
+    Random random = new Random(seed);
+    long iterations = 0;
+
+    byte[] solvedBytes = solved.toByteArray();
+    Candidate best = evaluate(solvedBytes, target, options, deadline, limitImpliesOverTarget);
+    iterations++;
+    if (!best.approximate && best.delta.equals(BigInteger.ZERO)) {
+      long elapsedMillis = (System.nanoTime() - start) / 1_000_000L;
+      return new SearchResult(
+          SudokuBoard.fromBytes(best.puzzle),
+          best.solutionCount,
+          best.approximate,
+          iterations,
+          elapsedMillis,
+          best.delta);
+    }
+    if (target.equals(BigInteger.ONE)) {
+      long elapsedMillis = (System.nanoTime() - start) / 1_000_000L;
+      return new SearchResult(
+          SudokuBoard.fromBytes(best.puzzle),
+          best.solutionCount,
+          best.approximate,
+          iterations,
+          elapsedMillis,
+          best.delta);
+    }
 
     while (System.nanoTime() < deadline && !Thread.currentThread().isInterrupted()) {
-      SudokuBoard solved = generateSolvedBoard(random);
-      byte[] puzzle = solved.toByteArray();
+      byte[] puzzle = solvedBytes.clone();
       int[] removalOrder = shuffledCells(random);
       int clues = SudokuBoard.CELL_COUNT;
-
-      Candidate current = evaluate(puzzle, target, options);
-      iterations++;
-      if (isBetter(current, best)) {
-        best = current;
-      }
-      if (current.delta.equals(BigInteger.ZERO)) {
-        break;
-      }
 
       for (int cell : removalOrder) {
         if (System.nanoTime() >= deadline || Thread.currentThread().isInterrupted()) {
@@ -72,28 +99,27 @@ public final class TargetPuzzleSearch {
         puzzle[cell] = 0;
         clues--;
 
-        Candidate candidate = evaluate(puzzle, target, options);
+        Candidate candidate =
+            evaluate(puzzle, target, options, deadline, limitImpliesOverTarget);
         iterations++;
+        if (candidate.approximate || candidate.overTarget) {
+          puzzle[cell] = previous;
+          clues++;
+          continue;
+        }
         if (isBetter(candidate, best)) {
           best = candidate;
         }
         if (candidate.delta.equals(BigInteger.ZERO)) {
-          best = candidate;
-          break;
+          long elapsedMillis = (System.nanoTime() - start) / 1_000_000L;
+          return new SearchResult(
+              SudokuBoard.fromBytes(best.puzzle),
+              best.solutionCount,
+              best.approximate,
+              iterations,
+              elapsedMillis,
+              best.delta);
         }
-        if (isBetter(candidate, current)) {
-          current = candidate;
-          if (candidate.solutionCount.compareTo(target) > 0) {
-            break;
-          }
-        } else {
-          puzzle[cell] = previous;
-          clues++;
-        }
-      }
-
-      if (best != null && best.delta.equals(BigInteger.ZERO)) {
-        break;
       }
     }
 
@@ -107,20 +133,27 @@ public final class TargetPuzzleSearch {
         best.delta);
   }
 
-  private Candidate evaluate(byte[] puzzle, BigInteger target, SolverOptions options) {
+  private Candidate evaluate(
+      byte[] puzzle,
+      BigInteger target,
+      SolverOptions options,
+      long deadlineNanos,
+      boolean limitImpliesOverTarget) {
     byte[] snapshot = puzzle.clone();
     SudokuBoard board = SudokuBoard.fromBytes(snapshot);
-    SudokuAnalysis analysis = solver.analyze(board, options);
+    SolverOptions timedOptions = options.withDeadlineNanos(deadlineNanos);
+    SudokuAnalysis analysis = solver.analyze(board, timedOptions);
     BigInteger count = analysis.solutionCount();
     boolean approximate = analysis.limitReached();
-    if (approximate) {
-      BigInteger estimate = estimateSolutions(board);
-      if (estimate.signum() > 0) {
-        count = estimate;
-      }
-    }
+    boolean maxSolutionsHit =
+        !options.isUnlimited()
+            && approximate
+            && count.compareTo(BigInteger.valueOf(options.maxSolutions())) >= 0;
+    boolean overTarget =
+        (!approximate && count.compareTo(target) > 0)
+            || (maxSolutionsHit && limitImpliesOverTarget);
     BigInteger delta = count.subtract(target).abs();
-    return new Candidate(snapshot, count, approximate, delta, countClues(snapshot));
+    return new Candidate(snapshot, count, approximate, overTarget, delta, countClues(snapshot));
   }
 
   private int resolveMaxSolutions(BigInteger target, int maxSolutions) {
@@ -141,68 +174,41 @@ public final class TargetPuzzleSearch {
     if (baseline == null) {
       return true;
     }
+    if (baseline.approximate && !candidate.approximate) {
+      return true;
+    }
+    if (!baseline.approximate && candidate.approximate) {
+      return false;
+    }
     int deltaCompare = candidate.delta.compareTo(baseline.delta);
     if (deltaCompare != 0) {
       return deltaCompare < 0;
     }
-    if (candidate.approximate != baseline.approximate) {
-      return !candidate.approximate;
-    }
     return candidate.clueCount > baseline.clueCount;
   }
 
-  private SudokuBoard generateSolvedBoard(Random random) {
-    byte[] cells = new byte[SudokuBoard.CELL_COUNT];
-    int[] rowMasks = new int[SudokuBoard.SIZE];
-    int[] columnMasks = new int[SudokuBoard.SIZE];
-    int[] boxMasks = new int[SudokuBoard.SIZE];
-    int[] order = new int[SudokuBoard.CELL_COUNT];
-    for (int i = 0; i < order.length; i++) {
-      order[i] = i;
+  private SudokuBoard generateSolvedBoard(Random random, long deadlineNanos) {
+    if (deadlineNanos > 0 && System.nanoTime() >= deadlineNanos) {
+      return null;
     }
-    shuffle(order, random);
-    if (!fillBoard(0, order, cells, rowMasks, columnMasks, boxMasks, random)) {
-      throw new IllegalStateException("Failed to generate solved board");
+    if (Thread.currentThread().isInterrupted()) {
+      return null;
+    }
+    int[] bands = shuffledRange(BASE, random);
+    int[] stacks = shuffledRange(BASE, random);
+    int[] rows = expandGroups(bands, random);
+    int[] cols = expandGroups(stacks, random);
+    int[] digits = shuffledDigits(random);
+
+    byte[] cells = new byte[SudokuBoard.CELL_COUNT];
+    int index = 0;
+    for (int r = 0; r < SIDE; r++) {
+      for (int c = 0; c < SIDE; c++) {
+        int value = pattern(rows[r], cols[c]) + 1;
+        cells[index++] = (byte) digits[value - 1];
+      }
     }
     return SudokuBoard.fromBytes(cells);
-  }
-
-  private boolean fillBoard(
-      int index,
-      int[] order,
-      byte[] cells,
-      int[] rowMasks,
-      int[] columnMasks,
-      int[] boxMasks,
-      Random random) {
-    if (index == order.length) {
-      return true;
-    }
-    int cell = order[index];
-    int row = cell / SudokuBoard.SIZE;
-    int col = cell % SudokuBoard.SIZE;
-    int box = boxIndex(row, col);
-    int used = rowMasks[row] | columnMasks[col] | boxMasks[box];
-    int candidates = (~used) & ALL_DIGITS_MASK;
-    int[] digits = shuffledDigits(random);
-    for (int digit : digits) {
-      int bit = 1 << (digit - 1);
-      if ((candidates & bit) == 0) {
-        continue;
-      }
-      cells[cell] = (byte) digit;
-      rowMasks[row] |= bit;
-      columnMasks[col] |= bit;
-      boxMasks[box] |= bit;
-      if (fillBoard(index + 1, order, cells, rowMasks, columnMasks, boxMasks, random)) {
-        return true;
-      }
-      cells[cell] = 0;
-      rowMasks[row] &= ~bit;
-      columnMasks[col] &= ~bit;
-      boxMasks[box] &= ~bit;
-    }
-    return false;
   }
 
   private int[] shuffledCells(Random random) {
@@ -214,38 +220,15 @@ public final class TargetPuzzleSearch {
     return order;
   }
 
-  private BigInteger estimateSolutions(SudokuBoard board) {
-    BigDecimal estimate = new BigDecimal(SudokuFacts.TOTAL_COMPLETED_GRIDS);
-    int[] rowMasks = new int[SudokuBoard.SIZE];
-    int[] columnMasks = new int[SudokuBoard.SIZE];
-    int[] boxMasks = new int[SudokuBoard.SIZE];
-    boolean anyFilled = false;
-
-    for (int row = 0; row < SudokuBoard.SIZE; row++) {
-      for (int col = 0; col < SudokuBoard.SIZE; col++) {
-        int value = board.valueAt(row, col);
-        if (value == 0) {
-          continue;
-        }
-        anyFilled = true;
-        int box = boxIndex(row, col);
-        int used = rowMasks[row] | columnMasks[col] | boxMasks[box];
-        int candidates = (~used) & ALL_DIGITS_MASK;
-        int candidateCount = Integer.bitCount(candidates);
-        if (candidateCount == 0) {
-          return BigInteger.ZERO;
-        }
-        estimate = estimate.divide(BigDecimal.valueOf(candidateCount), ESTIMATE_CONTEXT);
-        int bit = 1 << (value - 1);
-        rowMasks[row] |= bit;
-        columnMasks[col] |= bit;
-        boxMasks[box] |= bit;
-      }
+  private boolean limitImpliesOverTarget(BigInteger target, int solverLimit) {
+    if (solverLimit <= 0) {
+      return false;
     }
-    if (!anyFilled) {
-      return SudokuFacts.TOTAL_COMPLETED_GRIDS;
+    if (target.compareTo(BigInteger.valueOf(Integer.MAX_VALUE - 1L)) > 0) {
+      return false;
     }
-    return estimate.setScale(0, RoundingMode.HALF_UP).toBigInteger();
+    int targetPlusOne = target.intValue() + 1;
+    return solverLimit == targetPlusOne;
   }
 
   private int countClues(byte[] puzzle) {
@@ -273,15 +256,36 @@ public final class TargetPuzzleSearch {
     return digits;
   }
 
-  private int boxIndex(int row, int column) {
-    return (row / SudokuBoard.REGION_SIZE) * SudokuBoard.REGION_SIZE
-        + (column / SudokuBoard.REGION_SIZE);
+  private int pattern(int row, int col) {
+    return (BASE * (row % BASE) + (row / BASE) + col) % SIDE;
+  }
+
+  private int[] shuffledRange(int size, Random random) {
+    int[] values = new int[size];
+    for (int i = 0; i < size; i++) {
+      values[i] = i;
+    }
+    shuffle(values, random);
+    return values;
+  }
+
+  private int[] expandGroups(int[] groups, Random random) {
+    int[] result = new int[SIDE];
+    int index = 0;
+    for (int group : groups) {
+      int[] inner = shuffledRange(BASE, random);
+      for (int offset : inner) {
+        result[index++] = group * BASE + offset;
+      }
+    }
+    return result;
   }
 
   private static final class Candidate {
     private final byte[] puzzle;
     private final BigInteger solutionCount;
     private final boolean approximate;
+    private final boolean overTarget;
     private final BigInteger delta;
     private final int clueCount;
 
@@ -289,11 +293,13 @@ public final class TargetPuzzleSearch {
         byte[] puzzle,
         BigInteger solutionCount,
         boolean approximate,
+        boolean overTarget,
         BigInteger delta,
         int clueCount) {
       this.puzzle = puzzle;
       this.solutionCount = solutionCount;
       this.approximate = approximate;
+      this.overTarget = overTarget;
       this.delta = delta;
       this.clueCount = clueCount;
     }

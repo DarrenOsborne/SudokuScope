@@ -1,5 +1,6 @@
 package com.darren.sudokuscope.ui.viewmodel;
 
+import com.darren.sudokuscope.core.SudokuBoard;
 import com.darren.sudokuscope.core.solver.TargetPuzzleSearch;
 import java.math.BigInteger;
 import java.text.DecimalFormat;
@@ -29,6 +30,9 @@ public final class TargetCountViewModel {
   private final ExecutorService executor = newSingleThreadExecutor("target-search");
   private final AtomicReference<CompletableFuture<TargetPuzzleSearch.SearchResult>> inFlight =
       new AtomicReference<>();
+  private final AtomicReference<CompletableFuture<SudokuBoard>> baseInFlight =
+      new AtomicReference<>();
+  private volatile SudokuBoard baseSolution;
 
   private final StringProperty targetInput = new SimpleStringProperty("");
   private final StringProperty timeLimitInput = new SimpleStringProperty("8");
@@ -67,6 +71,32 @@ public final class TargetCountViewModel {
     return searchRunning;
   }
 
+  public void ensureBaseSolution() {
+    if (baseSolution != null || baseInFlight.get() != null) {
+      return;
+    }
+    CompletableFuture<SudokuBoard> future =
+        CompletableFuture.supplyAsync(
+            () -> searcher.generateRandomSolved(0L, System.nanoTime()), executor);
+    if (!baseInFlight.compareAndSet(null, future)) {
+      return;
+    }
+    future.whenComplete(
+        (board, throwable) -> {
+          baseInFlight.compareAndSet(future, null);
+          Platform.runLater(() -> handleBaseSolution(board, throwable));
+        });
+  }
+
+  public void refreshBaseSolution() {
+    if (searchRunning.get()) {
+      return;
+    }
+    baseSolution = null;
+    cancelBaseGeneration();
+    ensureBaseSolution();
+  }
+
   public void startSearch() {
     BigInteger target = parseTarget();
     if (target == null) {
@@ -76,11 +106,30 @@ public final class TargetCountViewModel {
     long seed = parseSeed();
     cancelSearch();
     searchRunning.set(true);
-    updateStatus("Searching for closest puzzle...");
-    boardViewModel.solverMessageProperty().set("Searching for closest puzzle...");
+    updateStatus("Preparing base solution...");
+    boardViewModel.solverMessageProperty().set("Preparing base solution...");
+    CompletableFuture<SudokuBoard> baseFuture = ensureBaseSolutionFuture();
     CompletableFuture<TargetPuzzleSearch.SearchResult> future =
-        CompletableFuture.supplyAsync(
-            () -> searcher.findClosest(target, timeLimitMs, MAX_SOLUTIONS, seed), executor);
+        baseFuture.thenApplyAsync(
+            board -> {
+              if (board == null) {
+                return new TargetPuzzleSearch.SearchResult(
+                    SudokuBoard.empty(),
+                    BigInteger.ZERO,
+                    true,
+                    0L,
+                    0L,
+                    target);
+              }
+              Platform.runLater(
+                  () -> {
+                    updateStatus("Searching for closest puzzle...");
+                    boardViewModel.solverMessageProperty().set("Searching for closest puzzle...");
+                  });
+              return searcher.findClosestFromSolved(
+                  board, target, timeLimitMs, MAX_SOLUTIONS, seed);
+            },
+            executor);
     inFlight.set(future);
     future.whenComplete(
         (result, throwable) -> {
@@ -103,8 +152,51 @@ public final class TargetCountViewModel {
 
   public void shutdown() {
     cancelSearch();
+    cancelBaseGeneration();
     executor.shutdownNow();
     boardViewModel.shutdown();
+  }
+
+  private void cancelBaseGeneration() {
+    CompletableFuture<SudokuBoard> existing = baseInFlight.getAndSet(null);
+    if (existing != null) {
+      existing.cancel(true);
+    }
+  }
+
+  private CompletableFuture<SudokuBoard> ensureBaseSolutionFuture() {
+    if (baseSolution != null) {
+      return CompletableFuture.completedFuture(baseSolution);
+    }
+    CompletableFuture<SudokuBoard> existing = baseInFlight.get();
+    if (existing != null) {
+      return existing;
+    }
+    CompletableFuture<SudokuBoard> future =
+        CompletableFuture.supplyAsync(
+            () -> searcher.generateRandomSolved(0L, System.nanoTime()), executor);
+    if (!baseInFlight.compareAndSet(null, future)) {
+      return baseInFlight.get();
+    }
+    future.whenComplete(
+        (board, throwable) -> {
+          baseInFlight.compareAndSet(future, null);
+          Platform.runLater(() -> handleBaseSolution(board, throwable));
+        });
+    return future;
+  }
+
+  private void handleBaseSolution(SudokuBoard board, Throwable throwable) {
+    if (throwable != null || board == null) {
+      updateStatus("Failed to generate a base solution.");
+      boardViewModel.solverMessageProperty().set("Base solution generation failed.");
+      return;
+    }
+    baseSolution = board;
+    String message = "Generated base solution.";
+    updateStatus(message);
+    boardViewModel.loadSearchResult(board, BigInteger.ONE, false, message);
+    boardViewModel.solverMessageProperty().set(message);
   }
 
   private void handleResult(

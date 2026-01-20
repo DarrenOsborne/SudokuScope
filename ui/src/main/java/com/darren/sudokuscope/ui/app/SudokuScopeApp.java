@@ -24,6 +24,12 @@ public class SudokuScopeApp extends Application {
     solveTab.setClosable(false);
     Tab targetTab = new Tab("Target Count", targetView.getRoot());
     targetTab.setClosable(false);
+    targetTab.setOnSelectionChanged(
+        event -> {
+          if (targetTab.isSelected()) {
+            targetViewModel.refreshBaseSolution();
+          }
+        });
 
     TabPane tabs = new TabPane(solveTab, targetTab);
 
