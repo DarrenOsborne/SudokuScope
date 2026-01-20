@@ -158,6 +158,34 @@ public final class BoardViewModel {
     triggerAnalysis();
   }
 
+  public void loadSearchResult(
+      SudokuBoard board, BigInteger solutionCount, boolean approximate, String message) {
+    Objects.requireNonNull(board, "board");
+    Objects.requireNonNull(solutionCount, "solutionCount");
+    Objects.requireNonNull(message, "message");
+    cancelInFlight();
+    analysisDebounce.stop();
+    gameState = new GameState(board);
+    refreshFromBoard(false);
+    if (!boardValid.get()) {
+      solverStatus.set(SolverStatus.INVALID);
+      uniqueSolution.set(false);
+      animateSolutionCount(BigInteger.ZERO, false);
+      solverMessage.set("Generated board is invalid.");
+      return;
+    }
+    SolverStatus status =
+        approximate
+            ? SolverStatus.LIMIT_REACHED
+            : (solutionCount.equals(BigInteger.ONE)
+                ? SolverStatus.UNIQUE_SOLUTION
+                : SolverStatus.MULTIPLE_SOLUTIONS);
+    solverStatus.set(status);
+    uniqueSolution.set(!approximate && solutionCount.equals(BigInteger.ONE));
+    animateSolutionCount(solutionCount, approximate);
+    solverMessage.set(message);
+  }
+
   public void shutdown() {
     cancelInFlight();
     solverService.close();
@@ -216,6 +244,10 @@ public final class BoardViewModel {
   }
 
   private void refreshFromBoard() {
+    refreshFromBoard(true);
+  }
+
+  private void refreshFromBoard(boolean allowEstimate) {
     SudokuBoard board = gameState.board();
     suppressListeners = true;
     try {
@@ -231,7 +263,9 @@ public final class BoardViewModel {
     undoAvailable.set(gameState.canUndo());
     redoAvailable.set(gameState.canRedo());
     updateValidation(board);
-    updateImmediateEstimate(board);
+    if (allowEstimate) {
+      updateImmediateEstimate(board);
+    }
   }
 
   private void updateValidation(SudokuBoard board) {
