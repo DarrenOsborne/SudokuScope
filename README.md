@@ -6,10 +6,10 @@ SudokuScope is a multi-module Gradle workspace for exploring, analysing, and eve
 
 | Module | Description |
 | --- | --- |
-| core | Pure Java domain + solver engine with backtracking, command history, validators, and asynchronous solver service. |
-| ui | JavaFX MVVM client that renders the board, debounces inputs, and streams live solution counts using the core module. |
+| core | Pure Java domain + solver engine with backtracking, target-count search, command history, validators, and asynchronous solver service. |
+| ui | JavaFX MVVM client with Solve and Target Count tabs for interactive play and search. |
 | web | Spring Boot API exposing the solver for remote or browser usage (POST /api/analyze). |
-| ench | JMH micro-benchmarks for profiling solver strategies. |
+| bench | JMH micro-benchmarks for profiling solver strategies. |
 | e2e-tests | High-level tests wiring the solver service as an end-to-end sanity check. |
 
 ## Getting Started
@@ -21,45 +21,54 @@ SudokuScope is a multi-module Gradle workspace for exploring, analysing, and eve
 
 ### Build & Verify
 
-`ash
+```bash
 ./gradlew check
-`
+```
 
 ### Run the JavaFX desktop client
 
-`ash
+```bash
 ./gradlew :ui:run
-`
+```
 
-The client starts with an empty board, shows the known number of valid completions for the blank grid, and continuously recomputes counts after each edit. Invalid boards surface validation feedback immediately.
+The client starts with the Solve tab. It shows the known number of valid completions for the blank grid, and continuously recomputes counts after each edit. Invalid boards surface validation feedback immediately.
+
+### Target Count mode
+
+Use the Target Count tab to generate a random solved grid and prune it toward a target solution count.
+
+1. Click the Target Count tab to generate a fresh solved base.
+2. Enter a target count and a time limit.
+3. Press "Find closest" to prune the base while keeping the count as close as possible.
 
 ### Run the REST API
 
-`ash
+```bash
 ./gradlew :web:bootRun
-`
+```
 
 Then POST an 81-length integer array to http://localhost:8080/api/analyze:
 
-`json
+```json
 {
   "cells": [5,3,0,0,7,0,0,0,0,6,0,0,1,9,5,0,0,0,0,9,8,0,0,0,0,6,0,8,0,0,0,6,0,0,0,3,4,0,0,8,0,3,0,0,1,7,0,0,0,2,0,0,0,6,0,0,0,4,1,9,0,0,5,0,0,0,0,8,0,0,7,9]
 }
-`
+```
 
 ### Run benchmarks
 
-`ash
+```bash
 ./gradlew :bench:jmh
-`
+```
 
 ## Architecture Highlights
 
-* **Solver strategy** – core uses a bit-mask driven backtracking engine with MRV heuristics. It counts solutions up to configurable limits and shortcuts the empty-board case using the known Sudoku constant (6.670903752021072936960e21).
-* **Command + Undo** – GameState executes BoardCommand instances (e.g. SetValueCommand) to support undo/redo and event observation.
-* **MVVM UI** – BoardViewModel exposes observable properties for the JavaFX view, debounces edits via PauseTransition, and offloads solving to a single-threaded SolverService with cancellation.
-* **Ports & adapters** – core remains framework-free; ui and web depend on it but not vice versa.
-* **Async service** – SolverService wraps the solver with an executor and CompletableFuture pipeline for reuse across modules.
+* **Solver strategy** core uses a bit-mask driven backtracking engine with MRV heuristics. It counts solutions up to configurable limits and shortcuts the empty-board case using the known Sudoku constant (6.670903752021072936960e21).
+* **Target count search** core includes a base-solution generator and a pruning loop that searches for a puzzle closest to a target count.
+* **Command + Undo** GameState executes BoardCommand instances (e.g. SetValueCommand) to support undo/redo and event observation.
+* **MVVM UI** BoardViewModel exposes observable properties for the JavaFX view, debounces edits via PauseTransition, and offloads solving to a single-threaded SolverService with cancellation.
+* **Ports & adapters** core remains framework-free; ui and web depend on it but not vice versa.
+* **Async service** SolverService wraps the solver with an executor and CompletableFuture pipeline for reuse across modules.
 
 ## Testing Strategy
 
@@ -67,6 +76,10 @@ Then POST an 81-length integer array to http://localhost:8080/api/analyze:
 * web module includes MockMvc tests for the REST surface.
 * e2e-tests module drives the asynchronous solver end-to-end.
 * Spotless enforces formatting across all modules.
+
+## Documentation
+
+* Change guide: `docs/CHANGE_GUIDE.md`
 
 ## Next Steps
 
