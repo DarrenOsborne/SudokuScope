@@ -79,6 +79,11 @@ final class BacktrackingSudokuSolver implements SudokuSolver {
     private final int[] boxMasks = new int[SudokuBoard.SIZE];
     private final int[] emptyPositions;
     private final List<CellPosition> emptyOrder;
+    private final int[] forcedCells;
+    private final int[] forcedBits;
+    private final int[] forcedDigits;
+    private final int[] forcedSwap;
+    private int forcedTop;
     private long solutionCount;
     private boolean limitReached;
     private long visitedNodes;
@@ -106,6 +111,10 @@ final class BacktrackingSudokuSolver implements SudokuSolver {
         }
       }
       this.emptyPositions = empties.stream().mapToInt(Integer::intValue).toArray();
+      this.forcedCells = new int[emptyPositions.length];
+      this.forcedBits = new int[emptyPositions.length];
+      this.forcedDigits = new int[emptyPositions.length];
+      this.forcedSwap = new int[emptyPositions.length];
     }
 
     private void search() {
@@ -134,19 +143,39 @@ final class BacktrackingSudokuSolver implements SudokuSolver {
         return;
       }
 
-      int pivotIndex = selectPivot(depth);
+      int forcedStart = forcedTop;
+      int forcedCount = propagateSingles(depth);
+      if (forcedCount < 0) {
+        return;
+      }
+      int nextDepth = depth + forcedCount;
+      if (nextDepth == emptyPositions.length) {
+        solutionCount++;
+        if (firstSolution == null && options.captureFirstSolution()) {
+          firstSolution = working.clone();
+        }
+        if (!options.isUnlimited() && solutionCount >= limit) {
+          limitReached = true;
+        }
+        undoForced(depth, forcedStart);
+        return;
+      }
+
+      int pivotIndex = selectPivot(nextDepth);
       if (pivotIndex < 0) {
+        undoForced(depth, forcedStart);
         return; // dead end
       }
-      swap(emptyPositions, depth, pivotIndex);
-      int cell = emptyPositions[depth];
+      swap(emptyPositions, nextDepth, pivotIndex);
+      int cell = emptyPositions[nextDepth];
       int row = cell / SudokuBoard.SIZE;
       int col = cell % SudokuBoard.SIZE;
       int box = boxIndex(row, col);
       int usedMask = rowMasks[row] | columnMasks[col] | boxMasks[box];
       int candidates = (~usedMask) & ALL_DIGITS_MASK;
       if (candidates == 0) {
-        swap(emptyPositions, depth, pivotIndex);
+        swap(emptyPositions, nextDepth, pivotIndex);
+        undoForced(depth, forcedStart);
         return;
       }
 
@@ -156,13 +185,62 @@ final class BacktrackingSudokuSolver implements SudokuSolver {
         int digit = Integer.numberOfTrailingZeros(bit) + 1;
         place(row, col, box, cell, digit, bit);
         visitedNodes++;
-        backtrack(depth + 1);
+        backtrack(nextDepth + 1);
         remove(row, col, box, cell, digit, bit);
         if (limitReached && !options.isUnlimited()) {
           break;
         }
       }
-      swap(emptyPositions, depth, pivotIndex);
+      swap(emptyPositions, nextDepth, pivotIndex);
+      undoForced(depth, forcedStart);
+    }
+
+    private int propagateSingles(int depth) {
+      int start = forcedTop;
+      boolean progress;
+      do {
+        progress = false;
+        int filled = forcedTop - start;
+        for (int i = depth + filled; i < emptyPositions.length; i++) {
+          int cell = emptyPositions[i];
+          int row = cell / SudokuBoard.SIZE;
+          int col = cell % SudokuBoard.SIZE;
+          int box = boxIndex(row, col);
+          int candidates = (~(rowMasks[row] | columnMasks[col] | boxMasks[box])) & ALL_DIGITS_MASK;
+          if (candidates == 0) {
+            undoForced(depth, start);
+            return -1;
+          }
+          if ((candidates & (candidates - 1)) == 0) {
+            int bit = candidates;
+            int digit = Integer.numberOfTrailingZeros(bit) + 1;
+            int target = depth + filled;
+            swap(emptyPositions, target, i);
+            forcedSwap[forcedTop] = i;
+            forcedCells[forcedTop] = cell;
+            forcedBits[forcedTop] = bit;
+            forcedDigits[forcedTop] = digit;
+            forcedTop++;
+            place(row, col, box, cell, digit, bit);
+            progress = true;
+            break;
+          }
+        }
+      } while (progress);
+      return forcedTop - start;
+    }
+
+    private void undoForced(int depth, int start) {
+      for (int i = forcedTop - 1; i >= start; i--) {
+        int cell = forcedCells[i];
+        int row = cell / SudokuBoard.SIZE;
+        int col = cell % SudokuBoard.SIZE;
+        int box = boxIndex(row, col);
+        remove(row, col, box, cell, forcedDigits[i], forcedBits[i]);
+        int target = depth + (i - start);
+        swap(emptyPositions, target, forcedSwap[i]);
+      }
+      forcedTop = start;
     }
 
     private int selectPivot(int depth) {
