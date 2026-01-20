@@ -186,6 +186,7 @@ public final class BoardViewModel {
       revertCell(row, col);
       return;
     }
+    handleBoardEdit();
   }
 
   private void revertCell(int row, int col) {
@@ -196,6 +197,22 @@ public final class BoardViewModel {
     } finally {
       suppressListeners = false;
     }
+  }
+
+  private void handleBoardEdit() {
+    SudokuBoard board = gameState.board();
+    undoAvailable.set(gameState.canUndo());
+    redoAvailable.set(gameState.canRedo());
+    updateValidation(board);
+    if (!boardValid.get()) {
+      uniqueSolution.set(false);
+      solverStatus.set(SolverStatus.INVALID);
+      animateSolutionCount(BigInteger.ZERO, false);
+      cancelInFlight();
+      return;
+    }
+    updateImmediateEstimate(board);
+    triggerAnalysis();
   }
 
   private void refreshFromBoard() {
