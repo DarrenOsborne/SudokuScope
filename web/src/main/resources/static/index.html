@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SudokuScope Web</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero">
+        <p class="eyebrow">SudokuScope</p>
+        <h1>Analyze Sudoku Boards in the Browser</h1>
+        <p class="subtitle">
+          Java + Spring Boot API paired with a lightweight web UI. Enter a board and inspect
+          validity, solution counts, and an exemplar solve.
+        </p>
+      </header>
+
+      <div class="tab-bar" role="tablist" aria-label="SudokuScope modes">
+        <button
+          class="tab-button active doc-tip"
+          role="tab"
+          aria-selected="true"
+          data-tab="solve"
+          data-tip="Analyze a board: validate entries, count solutions, and view an exemplar solve."
+        >
+          Solve
+        </button>
+        <button
+          class="tab-button doc-tip"
+          role="tab"
+          aria-selected="false"
+          data-tab="target"
+          data-tip="Generate a puzzle that lands near a target solution count."
+        >
+          Target Count
+        </button>
+      </div>
+
+      <section id="tab-solve" class="tab-panel active" role="tabpanel">
+        <div class="workspace">
+          <div class="panel">
+            <div class="panel-header">
+              <h2><span class="doc-tip" data-tip="Fill the grid with digits 1-9. Use Analyze to compute validity and solutions.">Board Input</span></h2>
+              <div class="actions">
+                <button id="loadExample" class="btn secondary">Load Example</button>
+                <button id="clearBoard" class="btn ghost">Clear</button>
+                <button id="analyzeBoard" class="btn">Analyze</button>
+              </div>
+            </div>
+            <p class="helper">
+              Quick start: load the example or type numbers, then press Analyze. Stop cancels long runs.
+            </p>
+            <div id="grid" class="grid" aria-label="Sudoku grid"></div>
+            <p class="hint">Use digits 1-9. Empty cells are treated as 0.</p>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <h2><span class="doc-tip" data-tip="Live solver feedback: validity, status, and total solution count.">Analysis</span></h2>
+              <div class="actions">
+                <button id="stopAnalyze" class="btn ghost hidden">Stop</button>
+              </div>
+            </div>
+            <div id="status" class="status">Ready.</div>
+            <div class="stats">
+              <div>
+                <span class="label">Valid</span>
+                <span id="statValid" class="value">-</span>
+              </div>
+              <div>
+                <span class="label">Status</span>
+                <span id="statStatus" class="value">-</span>
+              </div>
+              <div>
+                <span class="label">Solutions</span>
+                <span id="statSolutions" class="value">-</span>
+              </div>
+              <div>
+                <span class="label">Unique</span>
+                <span id="statUnique" class="value">-</span>
+              </div>
+            </div>
+            <div class="solution">
+              <div class="solution-title">
+                <span class="doc-tip" data-tip="One valid completion if the board is solvable.">
+                  Exemplar Solution
+                </span>
+              </div>
+              <div id="solutionGrid" class="grid readonly"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-target" class="tab-panel" role="tabpanel">
+        <div class="workspace">
+          <div class="panel">
+            <div class="panel-header">
+              <h2><span class="doc-tip" data-tip="Set a target solution count, then search for the closest puzzle.">Target Search</span></h2>
+              <div class="actions">
+                <button id="targetSearch" class="btn">Find Closest</button>
+                <button id="targetClear" class="btn ghost">Clear</button>
+              </div>
+            </div>
+            <p class="helper">
+              Enter a target solution count and time limit, then click Find Closest. Seed is optional.
+            </p>
+            <div class="search-fields">
+              <label>
+                Target solutions
+                <input id="targetInput" type="text" inputmode="numeric" placeholder="100" />
+              </label>
+              <label>
+                Time limit (sec)
+                <input id="targetTime" type="text" inputmode="decimal" placeholder="8" />
+              </label>
+              <label>
+                Seed (optional)
+                <input id="targetSeed" type="text" inputmode="numeric" placeholder="auto" />
+              </label>
+            </div>
+            <div id="targetGrid" class="grid readonly" aria-label="Target result grid"></div>
+            <p class="hint">Generates a puzzle with a solution count close to your target.</p>
+          </div>
+
+          <div class="panel">
+            <div class="panel-header">
+              <h2><span class="doc-tip" data-tip="Result metrics for the closest match: solution count, delta, and elapsed time.">Result</span></h2>
+            </div>
+            <div id="targetStatus" class="status">Ready.</div>
+            <div class="stats">
+              <div>
+                <span class="label">Solutions</span>
+                <span id="targetSolutions" class="value">-</span>
+              </div>
+              <div>
+                <span class="label">Approximate</span>
+                <span id="targetApprox" class="value">-</span>
+              </div>
+              <div>
+                <span class="label">Delta</span>
+                <span id="targetDelta" class="value">-</span>
+              </div>
+              <div>
+                <span class="label">Elapsed</span>
+                <span id="targetElapsed" class="value">-</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
